@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Ocean Guardian - 60s Challenge</title>
+    <style>
+        body { margin: 0; background: #001a33; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        canvas { border: 4px solid #ffffff; border-radius: 12px; box-shadow: 0 20px 50px rgba(0,0,0,0.5); background-color: #004a7c; cursor: crosshair; }
+    </style>
+</head>
+<body>
+
+<canvas id="gameCanvas"></canvas>
+
+<script>
+window.addEventListener('load', function() {
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const W = 800, H = 450;
+    canvas.width = W; canvas.height = H;
+
+    // --- Asset Loading ---
+    const bgImg = new Image();
+    bgImg.src = 'bg.jpg'; 
+    let bgReady = false;
+    bgImg.onload = () => { bgReady = true; };
+
+    // --- Game Variables ---
+    let state = 'START', score = 0, time = 60, frame = 0;
+    let trashes = [], animals = [], timer = null;
+    let tops = JSON.parse(localStorage.getItem('oceanHighScores') || '[]');
+
+    const boat = { x: 80, y: 200, w: 60, h: 45, s: 8 };
+    const keys = {};
+
+    window.addEventListener('keydown', e => keys[e.key] = true);
+    window.addEventListener('keyup', e => keys[e.key] = false);
+    
+    canvas.addEventListener('mousedown', () => {
+        if (state === 'START') start();
+        else if (state === 'GAMEOVER') state = 'START';
+    });
+
+    function start() {
+        score = 0; time = 60; trashes = []; animals = []; state = 'PLAYING';
+        if(timer) clearInterval(timer);
+        timer = setInterval(() => {
+            if (time > 0) time--;
+            else { state = 'GAMEOVER'; clearInterval(timer); save(); }
+        }, 1000);
+    }
+
+    function save() {
+        tops.push({ s: score, d: new Date().toLocaleDateString() });
+        tops.sort((a, b) => b.s - a.s);
+        tops = tops.slice(0, 5);
+        localStorage.setItem('oceanHighScores', JSON.stringify(tops));
+    }
+
+    class Sprite {
+        constructor(t) {
+            this.t = t; 
+            this.x = 850; 
+            this.y = Math.random() * 350 + 50;
+            this.s = t === 't' ? Math.random() * 2 + 3 : Math.random() * 3 + 4;
+            this.emoji = t === 't' ? ['🗑️', '🧴', '🛢️', '🥤'][Math.floor(Math.random()*4)] : ['🐠', '🐢', '🐬', '🐙'][Math.floor(Math.random()*4)];
+        }
+        draw() {
+            ctx.font = "38px Arial";
+            ctx.fillText(this.emoji, this.x, this.y);
+            this.x -= this.s;
+        }
+    }
+
+    function loop() {
+        // 1. Background
+        ctx.clearRect(0, 0, W, H);
+        if (bgReady) {
+            ctx.drawImage(bgImg, 0, 0, W, H);
+            ctx.fillStyle = 'rgba(0, 40, 80, 0.2)'; 
+            ctx.fillRect(0, 0, W, H);
+        } else {
+            ctx.fillStyle = '#004a7c';
+            ctx.fillRect(0, 0, W, H);
+        }
+
+        if (state === 'START') {
+            ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0,0,W,H);
+            ctx.textAlign = 'center'; ctx.fillStyle = '#fff';
+            
+            // Title
+            ctx.font = 'bold 42px sans-serif'; ctx.fillText('OCEAN GUARDIAN', 400, 130);
+            
+            // Rules
+            ctx.font = '20px sans-serif'; ctx.fillStyle = '#00d2ff';
+            ctx.fillText('HOW TO PLAY:', 400, 185);
+            ctx.fillStyle = '#fff';
+            ctx.font = '18px sans-serif';
+            ctx.fillText('• Collect Trash (🗑️ 🧴 🛢️) to get +10 Points', 400, 220);
+            ctx.fillText('• Avoid Sea Life (🐢 🐬 🐠) or lose -5 Points', 400, 250);
+            ctx.fillText('• Use WASD or Arrow Keys to move your Boat 🚤', 400, 280);
+            
+            // Start Action
+            ctx.fillStyle = '#f1c40f';
+            ctx.font = 'bold 24px sans-serif';
+            ctx.fillText('CLICK TO START CHALLENGE', 400, 350);
+        } 
+        else if (state === 'PLAYING') {
+            // Control
+            if (keys['w'] || keys['ArrowUp']) boat.y = Math.max(0, boat.y - boat.s);
+            if (keys['s'] || keys['ArrowDown']) boat.y = Math.min(H - boat.h, boat.y + boat.s);
+            if (keys['a'] || keys['ArrowLeft']) boat.x = Math.max(0, boat.x - boat.s);
+            if (keys['d'] || keys['ArrowRight']) boat.x = Math.min(W - boat.w, boat.x + boat.s);
+
+            ctx.font = "50px Arial";
+            ctx.fillText('🚤', boat.x, boat.y + 40);
+
+            frame++;
+            if (frame % 35 === 0) trashes.push(new Sprite('t'));
+            if (frame % 90 === 0) animals.push(new Sprite('a'));
+
+            trashes.forEach((o, i) => {
+                o.draw();
+                if (Math.abs(o.x - (boat.x+20)) < 45 && Math.abs(o.y - (boat.y+20)) < 40) {
+                    score += 10; trashes.splice(i, 1);
+                }
+            });
+            animals.forEach((o, i) => {
+                o.draw();
+                if (Math.abs(o.x - (boat.x+20)) < 45 && Math.abs(o.y - (boat.y+20)) < 40) {
+                    score = Math.max(0, score - 5); animals.splice(i, 1);
+                }
+            });
+            
+            trashes = trashes.filter(o => o.x > -50);
+            animals = animals.filter(o => o.x > -50);
+
+            // UI
+            ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(10, 10, 150, 40); ctx.fillRect(640, 10, 150, 40);
+            ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.font = 'bold 20px sans-serif';
+            ctx.fillText(`SCORE: ${score}`, 25, 38);
+            ctx.textAlign = 'right'; ctx.fillText(`TIME: ${time}s`, 775, 38);
+        } 
+        else if (state === 'GAMEOVER') {
+            ctx.fillStyle = 'rgba(0,0,0,0.85)'; ctx.fillRect(0,0,W,H);
+            ctx.textAlign = 'center'; ctx.fillStyle = '#00d2ff';
+            ctx.font = 'bold 36px sans-serif'; ctx.fillText('TIME UP!', 400, 80);
+            ctx.fillStyle = '#fff'; ctx.font = '24px sans-serif'; ctx.fillText('Final Score: ' + score, 400, 130);
+            
+            ctx.textAlign = 'left'; ctx.font = '18px sans-serif';
+            ctx.fillText('🏆 LEADERBOARD (Top 5)', 300, 180);
+            tops.forEach((h, i) => {
+                ctx.fillStyle = i === 0 ? '#f1c40f' : '#fff';
+                ctx.fillText(`${i+1}. ${h.s} pts - ${h.d}`, 300, 220 + i*30);
+            });
+            ctx.textAlign = 'center'; ctx.fillStyle = '#00d2ff';
+            ctx.fillText('Click to Try Again', 400, 410);
+        }
+        requestAnimationFrame(loop);
+    }
+    loop();
+});
+</script>
+</body>
+</html>
